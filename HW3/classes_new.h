@@ -172,7 +172,7 @@ public:
                 offset += sizeof(int);
                 slot_directory.push_back({record_offset, record_size});             // Add to slot directory
             }
-            // TO_DO: Modify this function to search for employee ID in the page you just loaded to main memory.
+            // DONE: Modify this function to search for employee ID in the page you just loaded to main memory.
 
 
             for (const Record& rec : records) {
