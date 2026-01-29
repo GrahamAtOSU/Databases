@@ -73,7 +73,7 @@ public:
         else{
             records.push_back(r); // Record stored in current page
             
-            // TO_DO: update slot directory information            
+            // DONE: update slot directory information            
             slot_directory.push_back({cur_size, r.get_size()}); // Updating slot directory with offset and size
 
             cur_size += r.get_size(); // Updating page size
@@ -99,12 +99,12 @@ public:
             offset += serialized.size();
         }
 
-        // TO_DO: Put a delimiter here to indicate slot directory starts from here 
+        // DONE: Put a delimiter here to indicate slot directory starts from here 
         const char slot_directory_delimiter = '#'; // Delimiter to indicate start of slot directory
         memcpy(page_data + offset, reinterpret_cast<const char*>(&slot_directory_delimiter), sizeof(slot_directory_delimiter));
         offset += sizeof(slot_directory_delimiter);
 
-        for (const auto& slots : slot_directory) { // TO_DO: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
+        for (const auto& slots : slot_directory) { // DONE: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
             memcpy(page_data + offset, reinterpret_cast<const char*>(&slots.first), sizeof(slots.first));
             offset += sizeof(slots.first);
             memcpy(page_data + offset, reinterpret_cast<const char*>(&slots.second), sizeof(slots.second));
@@ -124,7 +124,7 @@ public:
         streamsize bytes_read = in.gcount(); // used to check if 4KB was actually read from the data file
         if (bytes_read == 4096) {
             
-            // TO_DO: Process page_data (4 KB page) and put the information into records and slot_directory (main memory).
+            // DONE: Process page_data (4 KB page) and put the information into records and slot_directory (main memory).
             clear(); // Clear existing data before populating
             int offset = 0;
             // Read record fields
@@ -261,7 +261,7 @@ public:
         
         data_file.seekg(0, ios::beg);  // Rewind the data_file to the beginning for reading
 
-        // TO_DO: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
+        // DONE: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
         int page_number = 0;
         while(buffer[page_number].read_from_data_file(data_file)){
             for(const auto& record : buffer[page_number].records){
@@ -279,7 +279,7 @@ public:
                 }
             }
         }
-        // TO_DO: Print "Record not found" if no records match.
+        // DONE: Print "Record not found" if no records match.
         cout << "Record not found" << endl;
     }
 };
