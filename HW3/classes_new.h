@@ -252,6 +252,13 @@ public:
             }
             
         }
+
+        // Write any remaining pages in the buffer to the data file
+        for (page& p : buffer) { // using write_into_data_file() to write the pages into the data file from buffer
+            p.write_into_data_file(data_file);
+            p.clear(); // Clear the page after writing to the data file
+        }
+
         csvFile.close();  // Close the CSV file
     }
 
