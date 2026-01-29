@@ -173,14 +173,15 @@ public:
                 slot_directory.push_back({record_offset, record_size});             // Add to slot directory
             }
             // DONE: Modify this function to search for employee ID in the page you just loaded to main memory.
-
-
+            // DONE: Search the file for all records with the given id
+            bool found = false;
             for (const Record& rec : records) {
                 if (rec.id == employee_id) {
                     rec.print(); // Print the record if found
-                    return true; // Record found
+                    found = true;
                 }
             } 
+            return found;
         }
 
         if (bytes_read > 0) { 
