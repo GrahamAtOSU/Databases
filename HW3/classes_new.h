@@ -47,7 +47,7 @@ public:
         oss.write(name.c_str(), name.size());                                       // Writes the name in binary form
         oss.write(reinterpret_cast<const char*>(&bio_len), sizeof(bio_len));        // Writes the size of the Bio in binary format. 
         oss.write(bio.c_str(), bio.size());                                         // Writes bio in binary form
-
+        return oss.str(); // Return the serialized string
     }
 };
 

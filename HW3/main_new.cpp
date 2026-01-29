@@ -26,6 +26,15 @@ int main(int argc, char* const argv[]) {
     manager.createFromFile("Employee.csv");
 
     // TODO: You'll receive employee IDs as arguments, process them to retrieve the record, or display a message if not found. 
+    for(int i = 1; i < argc; i++){
+        int searchId = stoi(argv[i]);
+        cout << "Searching for Employee ID: " << searchId << endl;
+        manager.findAndPrintEmployee(searchId);
+    }
+
+
+
+
 
     return 0;
 }
