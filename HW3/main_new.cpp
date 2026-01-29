@@ -25,16 +25,24 @@ int main(int argc, char* const argv[]) {
     // we want to read from the Employee.csv and write into the new data_file
     manager.createFromFile("Employee.csv");
 
+
+
     // TODO: You'll receive employee IDs as arguments, process them to retrieve the record, or display a message if not found. 
-    for(int i = 1; i < argc; i++){
-        int searchId = stoi(argv[i]);
-        cout << "Searching for Employee ID: " << searchId << endl;
-        manager.findAndPrintEmployee(searchId);
-    }
+    int run = 1;
 
-
-
-
+    while (run)
+    {
+        int choice = 0;
+        cout << "Enter 1 to exit or enter an employee ID: ";
+        if (!(cin >> choice)) {
+            break;
+        }
+        if (choice == 1) {
+            run = 0;
+        } else {
+            manager.findAndPrintEmployee(choice);
+        }
+    } 
 
     return 0;
 }

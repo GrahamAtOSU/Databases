@@ -31,7 +31,7 @@ public:
     }
 
     int get_size(){ // Returns size of the record
-        return int(sizeof(int) * 2 + bio.length() + name.length());
+        return int(sizeof(int) * 4 + bio.length() + name.length());
     }
     
     // Take a look at Figure 9.9 and read the Section 9.7.2 [Record Organization for Variable Length Records]
@@ -65,8 +65,8 @@ public:
     }
 
     bool insert_record_into_page(Record r){  // Write a Record into your page (main memory)
-        
-        if(cur_size + r.get_size() >= 4096){  // Checking if the current Record can be entered or not   
+        int slot_dir_size = (records.size() + 1) * (sizeof(int) * 2 + sizeof(char)); // Calculating the size of slot directory if we add this new record
+        if(cur_size + r.get_size() + slot_dir_size >= 4096){  // Checking if the current Record can be entered or not   
 
             return false; // You cannot insert the current record into this page
         }
