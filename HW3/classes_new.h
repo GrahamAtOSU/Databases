@@ -261,7 +261,7 @@ public:
 
         // DONE: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
         int page_number = 0;
-        while(buffer[page_number].read_from_data_file(data_file)){
+        while(buffer[page_number].read_from_data_file(data_file, searchId)){
             for(const auto& record : buffer[page_number].records){
                 if(record.id == searchId){
                     record.print(); // Print the record if found
