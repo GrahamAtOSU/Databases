@@ -116,7 +116,7 @@ public:
     }
 
     // Read a page from a binary input stream, i.e., EmployeeRelation.dat file to populate a page object
-    bool read_from_data_file(istream& in) {
+    bool read_from_data_file(istream& in, int employee_id) {
         char page_data[4096] = {0}; // Character array used to read 4 KB from the data file to your main memory. 
         in.read(page_data, 4096); // Read a page of 4 KB from the data file 
 
@@ -174,7 +174,15 @@ public:
             }
             // TO_DO: Modify this function to search for employee ID in the page you just loaded to main memory.
 
-            return true;
+
+            for (const Record& rec : records) {
+                if (rec.id == employee_id) {
+                    rec.print(); // Print the record if found
+                    return true; // Record found
+                }
+            }
+            
+            return false; // Record not found in this page
         }
 
         if (bytes_read > 0) { 
