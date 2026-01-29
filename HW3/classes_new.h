@@ -180,9 +180,7 @@ public:
                     rec.print(); // Print the record if found
                     return true; // Record found
                 }
-            }
-            
-            return false; // Record not found in this page
+            } 
         }
 
         if (bytes_read > 0) { 
