@@ -24,10 +24,10 @@ public:
 
     //You may use this for debugging / showing the record to standard output. 
     void print() const {
-        cout << "\tID: " << id << "\n";
+        cout << "\n \tID: " << id << "\n";
         cout << "\tNAME: " << name << "\n";
         cout << "\tBIO: " << bio << "\n";
-        cout << "\tMANAGER_ID: " << manager_id << "\n";
+        cout << "\tMANAGER_ID: " << manager_id << "\n" "\n";
     }
 
     int get_size(){ // Returns size of the record
@@ -116,7 +116,7 @@ public:
     }
 
     // Read a page from a binary input stream, i.e., EmployeeRelation.dat file to populate a page object
-    bool read_from_data_file(istream& in, int employee_id) {
+    bool read_from_data_file(istream& in) {
         char page_data[4096] = {0}; // Character array used to read 4 KB from the data file to your main memory. 
         in.read(page_data, 4096); // Read a page of 4 KB from the data file 
 
@@ -147,16 +147,17 @@ public:
                 // Read Name length and Name
                 int name_len = *reinterpret_cast<int*>(page_data + offset);
                 offset += sizeof(int); // Move past Name length
+            
                 string name;
                 name = string(page_data + offset, name_len);
-                offset += name_len; // Move past Name
+                offset += name_len * sizeof(char); // Move past Name
 
                 // Read Bio length and Bio
                 int bio_len = *reinterpret_cast<int*>(page_data + offset);
                 offset += sizeof(int); // Move past Bio length
                 string bio;
                 bio = string(page_data + offset, bio_len);
-                offset += bio_len; // Move past Bio
+                offset += bio_len * sizeof(char); // Move past Bio
 
                 vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
                 
@@ -170,18 +171,14 @@ public:
                 offset += sizeof(int);
                 int record_size = *reinterpret_cast<int*>(page_data + offset);      // Read record size
                 offset += sizeof(int);
+
+                if (record_offset == 0 && record_size == 0) {
+                    break; // End of slot directory
+                }
+
                 slot_directory.push_back({record_offset, record_size});             // Add to slot directory
             }
-            // DONE: Modify this function to search for employee ID in the page you just loaded to main memory.
-            // DONE: Search the file for all records with the given id
-            bool found = false;
-            for (const Record& rec : records) {
-                if (rec.id == employee_id) {
-                    rec.print(); // Print the record if found
-                    found = true;
-                }
-            } 
-            return found;
+            return true; // Successfully read a page
         }
 
         if (bytes_read > 0) { 
@@ -264,28 +261,24 @@ public:
 
     // Searches for an Employee ID in EmployeeRelation.dat
     void findAndPrintEmployee(int searchId) {
+        data_file.clear(); // Clear any EOF flags
+        data_file.seekg(0, ios::beg);
         
-        data_file.seekg(0, ios::beg);  // Rewind the data_file to the beginning for reading
-
-        // DONE: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
-        int page_number = 0;
-        while(buffer[page_number].read_from_data_file(data_file, searchId)){
-            for(const auto& record : buffer[page_number].records){
-                if(record.id == searchId){
-                    record.print(); // Print the record if found
-                    return;
-                }
-            }
-            page_number++;
-            if(page_number >= buffer.size()){
-                // Reached the page limit in main memory
-                page_number = 0; // Reset to first page
-                for (page& p : buffer) {
-                    p.clear(); // Clear the pages for re-use
+        bool found = false;
+        page temp_page;
+        
+        while (temp_page.read_from_data_file(data_file)) {
+            
+            for (const auto& record : temp_page.records) {
+                if (record.id == searchId) {
+                    record.print();
+                    found = true;
                 }
             }
         }
-        // DONE: Print "Record not found" if no records match.
-        cout << "Record not found" << endl;
+    
+        if (!found) {
+            cout << "Record not found" << endl;
+        }
     }
 };
