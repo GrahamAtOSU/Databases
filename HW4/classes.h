@@ -67,8 +67,15 @@ public:
             return false; // Cannot insert the record into this page
         } else {
             records.push_back(r);
+            
+            int offset = 0;
+            for (size_t i = 0; i < records.size(); i++) {
+              offset += records[i].get_size();
+            }
+            slot_directory.push_back({offset, record_size}); // Add offset and size to slot directory
             cur_size += record_size + slot_size;
-			// TODO: update slot directory information
+			// TODO: DONE
+            //update slot directory information
             return true;
         }
     }
@@ -95,7 +102,7 @@ public:
             
         memcpy(page_data + bottom_offset, &overflowPointerIndex, sizeof(overflowPointerIndex)); // Write overflowPointerIndex at the end of the page
 
-        for (size_t i = slot_directory.size(); i >= 0; i--)
+        for (int i = slot_directory.size() - 1; i >= 0; i--)
         {
             bottom_offset -= sizeof(int);
             //we use long long here because we 8 bytes for the id and manger id
@@ -134,8 +141,9 @@ public:
             while (bottom_offset >= 0) {
                 int record_size, record_offset;
 
-                memcpy(&record_size, page_data + bottom_offset, sizeof(int)); // Read record size
                 memcpy(&record_offset, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record offset
+                memcpy(&record_size, page_data + bottom_offset, sizeof(int)); // Read record size
+
 
                 if (record_size >= 0 && record_offset > 0 && record_offset + record_size <= 4096) {
                     temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
@@ -333,16 +341,64 @@ public:
             //   - Get the page index from PageDirectory. If it's not in PageDirectory, define a new page using nextFreePage.
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
             int hash_value = compute_hash_value(record.id);
-            int pageIndex = hash_value;
-    
+            int pageIndex;
+
             //   - Check if the page index is already in PageDirectory. If not, initialize it with nextFreePage and increment nextFreePage.
-            if (PageDirectory[pageIndex] == -1) {
-                PageDirectory[pageIndex] = nextFreePage; // Initialize with nextFreePage
-                nextFreePage++; // Increment nextFreePage for the next available page index
+            if (PageDirectory[hash_value] == -1) {
+                pageIndex = nextFreePage;
+                PageDirectory[hash_value] = pageIndex;
+                nextFreePage++;
+            
+                Page newPage;
+                newPage.insert_record_into_page(record);
+
+                fstream indexFile(fileName, ios::binary | ios::in | ios::out | ios::trunc); // Open index file for writing (truncating existing content)
+                if (!indexFile) {
+                    cerr << "Error: Unable to open index file for writing." << endl;
+                    continue;
+                }
+            
+                indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
+                if (indexFile.fail()) {
+                    cerr << "Error: Failed to seek to the correct position in the index file." << endl;
+                    indexFile.close();
+                    continue;
+                }
+                newPage.write_into_data_file(indexFile); // Write the new page to the index file
+                indexFile.close();
             }
 
-        }
-
+            else {
+                    // Page already exists for this bucket
+                    pageIndex = PageDirectory[hash_value];
+                    
+                    // Read the existing page
+                    fstream indexFile(fileName, ios::binary | ios::in | ios::out);
+                    if (!indexFile) {
+                        cerr << "Error: Unable to open index file for reading." << endl;
+                        continue;
+                    }
+                    
+                    indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
+                    if (indexFile.fail()) {
+                        cerr << "Error: Seek failed when reading page " << pageIndex << endl;
+                        indexFile.close();
+                        continue;
+                    }
+                    
+                    Page page;
+                    bool success = page.read_from_data_file(indexFile);
+                    indexFile.close();
+                    
+                    if (!success) {
+                        cerr << "Error: Failed to read page " << pageIndex << endl;
+                        continue;
+                    }
+                    
+                    // Insert the record into the page (handles overflow internally)
+                    addRecordToIndex(pageIndex, page, record);
+                }
+            }
         // Close the CSV file
         csvFile.close();
     }
