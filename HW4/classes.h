@@ -127,7 +127,8 @@ private:
     int compute_hash_value(int id) {
         int hash_value;
 
-        // TODO: Implement the hash function h = id mod 2^8
+        // TODO:DONE Implement the hash function h = id mod 2^8
+        hash_value = id % 256;
         return hash_value;
     }
 
