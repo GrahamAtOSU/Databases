@@ -99,7 +99,7 @@ public:
         {
             bottom_offset -= sizeof(int);
             //we use long long here because we 8 bytes for the id and manger id
-            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int))); // Write record size
+            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int)); // Write record size
             bottom_offset -= sizeof(int);
             memcpy(page_data + bottom_offset, &slot_directory[i].first, sizeof(int)); // Write record offset        
         }
@@ -170,14 +170,14 @@ public:
                 string name(page_data + record_offset, name_len); // Read name
                 record_offset += name_len * sizeof(char); // Move offset to read bio length
 
-                =memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
+                memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
                 record_offset += sizeof(int); // Move offset to read bio
 
                 string bio(page_data + record_offset, bio_len); // Read bio
 
                 vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
                 Record record(fields); // Construct Record object
-                records.push_back(r); // Add record to the page's records vector
+                records.push_back(record); // Add record to the page's records vector
             }
 
             cur_size = sizeof(int);
@@ -307,7 +307,7 @@ private:
     }
 
 public:
-    HashIndex(string indexFileName) : nextFreePage(0), fileName(indexFileName) {
+    HashIndex(string indexFileName) : nextFreePage(0), fileName(indexFileName), PageDirectory(256, -1) {
     }
 
     // Function to create hash index from Employee CSV file
@@ -328,11 +328,18 @@ public:
             }
             Record record(fields);
 
-            // TODO:
+            // TODO:DONE
             //   - Compute hash value for the record's ID using compute_hash_value() function.
             //   - Get the page index from PageDirectory. If it's not in PageDirectory, define a new page using nextFreePage.
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
-
+            int hash_value = compute_hash_value(record.id);
+            int pageIndex = hash_value;
+    
+            //   - Check if the page index is already in PageDirectory. If not, initialize it with nextFreePage and increment nextFreePage.
+            if (PageDirectory[pageIndex] == -1) {
+                PageDirectory[pageIndex] = nextFreePage; // Initialize with nextFreePage
+                nextFreePage++; // Increment nextFreePage for the next available page index
+            }
 
         }
 
