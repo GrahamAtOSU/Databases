@@ -209,7 +209,7 @@ private:
     }
 
 public:
-    HashIndex(string indexFileName) : nextFreePage(0), fileName(indexFileName) {
+    HashIndex(string indexFileName) : nextFreePage(0), fileName(indexFileName), PageDirectory(256, -1) {
     }
 
     // Function to create hash index from Employee CSV file
@@ -230,11 +230,18 @@ public:
             }
             Record record(fields);
 
-            // TODO:
+            // TODO:DONE
             //   - Compute hash value for the record's ID using compute_hash_value() function.
             //   - Get the page index from PageDirectory. If it's not in PageDirectory, define a new page using nextFreePage.
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
-
+            int hash_value = compute_hash_value(record.id);
+            int pageIndex = hash_value;
+    
+            //   - Check if the page index is already in PageDirectory. If not, initialize it with nextFreePage and increment nextFreePage.
+            if (PageDirectory[pageIndex] == -1) {
+                PageDirectory[pageIndex] = nextFreePage; // Initialize with nextFreePage
+                nextFreePage++; // Increment nextFreePage for the next available page index
+            }
 
         }
 
