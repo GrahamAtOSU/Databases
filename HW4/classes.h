@@ -99,7 +99,7 @@ public:
         {
             bottom_offset -= sizeof(int);
             //we use long long here because we 8 bytes for the id and manger id
-            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int))); // Write record size
+            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int)); // Write record size
             bottom_offset -= sizeof(int);
             memcpy(page_data + bottom_offset, &slot_directory[i].first, sizeof(int)); // Write record offset        
         }
@@ -170,14 +170,14 @@ public:
                 string name(page_data + record_offset, name_len); // Read name
                 record_offset += name_len * sizeof(char); // Move offset to read bio length
 
-                =memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
+                memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
                 record_offset += sizeof(int); // Move offset to read bio
 
                 string bio(page_data + record_offset, bio_len); // Read bio
 
                 vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
                 Record record(fields); // Construct Record object
-                records.push_back(r); // Add record to the page's records vector
+                records.push_back(record); // Add record to the page's records vector
             }
 
             cur_size = sizeof(int);
