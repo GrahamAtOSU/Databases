@@ -85,10 +85,24 @@ public:
             offset += serialized.size();
         }
 
-        // TODO:
+        // TODO: DONE.
         //  - Write slot_directory in reverse order into page_data buffer.
         //  - Write overflowPointerIndex into page_data buffer.
-        //  You should write the first entry of the slot_directory, which have the info about the first record at the bottom of the page, before overflowPointerIndex.
+        //  You should write the first entry of the slot_directory, 
+        //  which have the info about the first record at the bottom of the page, before overflowPointerIndex.
+
+        int bottom_offset = 4096 - sizeof(int); // Start from the bottom of the page for slot directory and overflow pointer
+            
+        memcpy(page_data + bottom_offset, &overflowPointerIndex, sizeof(overflowPointerIndex)); // Write overflowPointerIndex at the end of the page
+
+        for (size_t i = slot_directory.size(); i >= 0; i--)
+        {
+            bottom_offset -= sizeof(int);
+            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int)); // Write record size
+            bottom_offset -= sizeof(int);
+            memcpy(page_data + bottom_offset, &slot_directory[i].first, sizeof(int)); // Write record offset        
+        }
+        
 
         // Write the page_data buffer to the output stream
         out.write(page_data, sizeof(page_data));
