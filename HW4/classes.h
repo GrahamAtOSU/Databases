@@ -177,19 +177,15 @@ private:
                 nextFreePage++; // Increment nextFreePage for the next available page index
 
                 // Write the new overflow page to the index file
-                indexFile.seekp(page.overflowPointerIndex * Page_SIZE, ios::beg);
-                overflowPage.write_into_data_file(indexFile);
+                indexFile.seekp(page.overflowPointerIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
+                overflowPage.write_into_data_file(indexFile); // After inserting the record, write the modified page back to the index file.
             }
         } else {
             // If the record was successfully inserted into the current page, write it back to the index file
-            indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
+            indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
+            // TODO:DONE After inserting the record, write the modified page back to the index file. 
             page.write_into_data_file(indexFile);
         }
-
-        // Seek to the appropriate position in the index file
-		// TODO: After inserting the record, write the modified page back to the index file. 
-		//		 Remember to use the correct position (i.e., pageIndex) if you are writing out an overflow page!
-        indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
 
         // Close the index file
         indexFile.close();
