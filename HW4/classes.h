@@ -316,9 +316,16 @@ public:
         // Open index file in binary mode for reading
         ifstream indexFile(fileName, ios::binary | ios::in);
 
-        // TODO:
+        // TODO: DONE
         //  - Compute hash value for the given ID using compute_hash_value() function
         //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
+
+        int hash_value = compute_hash_value(id);
+        if (PageDirectory[hash_value] != -1) {
+            searchRecordByIdInPage(PageDirectory[hash_value], id);
+        } else {
+            cout << "Record with ID " << id << " not found in the index." << endl;
+        }
 
         // Close the index file
         indexFile.close();
