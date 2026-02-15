@@ -265,16 +265,45 @@ private:
         // Open index file in binary mode for reading
         ifstream indexFile(fileName, ios::binary | ios::in);
 
+        if(!indexFile) {
+            cerr << "Error: Unable to open index file for searching record." << endl;
+            return;
+        }
+
+        // TODO:
+        //  - Search for the record by ID in the page
+        //  - Check for overflow pages and report if record with given ID is not found
+
         // Seek to the appropriate position in the index file
         indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
 
         // Read the page from the index file
         Page page;
-        page.read_from_data_file(indexFile);
+        bool page_read = page.read_from_data_file(indexFile);
 
-        // TODO:
-        //  - Search for the record by ID in the page
-        //  - Check for overflow pages and report if record with given ID is not found
+        if (!page_read) {
+            cerr << "Record with ID " << id << " not found in the index." << endl;
+            indexFile.close();
+            return;
+        }
+        
+        bool found = false;
+        for (auto &record: page.records) {
+            if (record.id == id) {
+                cout << "Record found in page index " << pageIndex << ":" << endl;
+                record.print();
+                found = true;
+                break;
+            }
+        }
+
+        if (!found && page.overflowPointerIndex != -1) {
+            // If the record was not found in the current page, check the overflow page
+            searchRecordByIdInPage(page.overflowPointerIndex, id);
+        } else if (!found) {
+            cout << "Record with ID " << id << " not found in the index." << endl;
+        }  
+        indexFile.close();
     }
 
 public:
