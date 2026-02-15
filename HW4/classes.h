@@ -98,12 +98,13 @@ public:
         for (size_t i = slot_directory.size(); i >= 0; i--)
         {
             bottom_offset -= sizeof(int);
-            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int)); // Write record size
+            //we use long long here because we 8 bytes for the id and manger id
+            memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int))); // Write record size
             bottom_offset -= sizeof(int);
             memcpy(page_data + bottom_offset, &slot_directory[i].first, sizeof(int)); // Write record offset        
         }
         
-
+        
         // Write the page_data buffer to the output stream
         out.write(page_data, sizeof(page_data));
     }
@@ -115,7 +116,75 @@ public:
 
         streamsize bytes_read = in.gcount();
         if (bytes_read == 4096) {
-            // TODO: Process data to fill the records, slot_directory, and overflowPointerIndex
+            // TODO: 
+            // Process data to fill the records, slot_directory, and overflowPointerIndex
+            
+            int bottom_offset = 4096 - sizeof(int); // Start from the bottom of the page to read overflowPointerIndex and slot directory
+            
+            memcpy(&overflowPointerIndex, page_data + bottom_offset, sizeof(int)); // Read overflowPointerIndex from the bottom of the page
+
+            slot_directory.clear();
+            records.clear();    
+
+
+            bottom_offset -= sizeof(int); // Move up to read slot directory entries
+
+
+            vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
+            while (bottom_offset >= 0) {
+                int record_size, record_offset;
+
+                memcpy(&record_size, page_data + bottom_offset, sizeof(int)); // Read record size
+                memcpy(&record_offset, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record offset
+
+                if (record_size >= 0 && record_offset > 0 && record_offset + record_size <= 4096) {
+                    temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
+                    bottom_offset -= sizeof(int) * 2; // Move up for the next slot directory entry
+                }
+                else {
+                    break; // No more valid slot directory entries
+                }
+            }
+
+            for (int i = temp_slots.size() - 1; i >= 0; i--) {
+                slot_directory.push_back(temp_slots[i]); // Add valid slot directory entries to the page's slot_directory
+            }
+
+
+            for (const auto &slots: slot_directory) {
+                int record_offset = slots.first;
+                int record_size = slots.second;
+
+                long long id, manager_id;
+                memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
+                record_offset += sizeof(long long); // Move offset to read manager ID
+                memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
+                record_offset += sizeof(long long); // Move offset to read name length
+
+
+
+                int name_len, bio_len;
+                memcpy(&name_len, page_data + record_offset, sizeof(int)); // Read name length
+                record_offset += sizeof(int); // Move offset to read name
+
+                string name(page_data + record_offset, name_len); // Read name
+                record_offset += name_len * sizeof(char); // Move offset to read bio length
+
+                =memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
+                record_offset += sizeof(int); // Move offset to read bio
+
+                string bio(page_data + record_offset, bio_len); // Read bio
+
+                vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
+                Record record(fields); // Construct Record object
+                records.push_back(r); // Add record to the page's records vector
+            }
+
+            cur_size = sizeof(int);
+            for (auto &record: records) {
+                cur_size += record.get_size() + sizeof(int) * 2; // Update current size of the page
+            }
+
             return true;
         }
 
