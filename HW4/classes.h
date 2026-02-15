@@ -225,19 +225,36 @@ private:
             return;
         }
 		
-		// TODO: 
+		// TODO:DONE
         //  - Use seekp() to seek to the offset of the correct page in the index file
 		//		indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
+        indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
 		//  - try insert_record_into_page()
 		//     - if it fails, then you'll need to either...
 		//			- go to next overflow page and try inserting there (keep doing this until you find a spot for the record)
 		//			- create an overflow page (if page.overflowPointerIndex == -1) using nextFreePage. update nextFreePage index and pageIndex.
+        if (!page.insert_record_into_page(record)) {
+            // If the record cannot be inserted into the current page, check for overflow page
+            if (page.overflowPointerIndex != -1) {
+                // There is an overflow page, try inserting there
+                addRecordToIndex(page.overflowPointerIndex, page, record);
+            } else {
+                // No overflow page, create a new one
+                Page overflowPage = Page(); // Create a new overflow page
+                overflowPage.insert_record_into_page(record); // Insert the record into the new overflow page
+                page.overflowPointerIndex = nextFreePage; // Update the overflow pointer to point to the new page
+                nextFreePage++; // Increment nextFreePage for the next available page index
 
-
-        // Seek to the appropriate position in the index file
-		// TODO: After inserting the record, write the modified page back to the index file. 
-		//		 Remember to use the correct position (i.e., pageIndex) if you are writing out an overflow page!
-        indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
+                // Write the new overflow page to the index file
+                indexFile.seekp(page.overflowPointerIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
+                overflowPage.write_into_data_file(indexFile); // After inserting the record, write the modified page back to the index file.
+            }
+        } else {
+            // If the record was successfully inserted into the current page, write it back to the index file
+            indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
+            // TODO:DONE After inserting the record, write the modified page back to the index file. 
+            page.write_into_data_file(indexFile);
+        }
 
         // Close the index file
         indexFile.close();
