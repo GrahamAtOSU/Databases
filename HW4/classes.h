@@ -105,7 +105,6 @@ public:
         for (int i = slot_directory.size() - 1; i >= 0; i--)
         {
             bottom_offset -= sizeof(int);
-            //we use long long here because we 8 bytes for the id and manger id
             memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int)); // Write record size
             bottom_offset -= sizeof(int);
             memcpy(page_data + bottom_offset, &slot_directory[i].first, sizeof(int)); // Write record offset        
@@ -134,20 +133,17 @@ public:
             records.clear();    
 
 
-            bottom_offset -= sizeof(int); // Move up to read slot directory entries
-
-
             vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
-            while (bottom_offset >= 0) {
-                int record_size, record_offset;
+            while (bottom_offset >= sizeof(int) * 2) {
+                bottom_offset -= sizeof(int) * 2; // Move to the start of the next slot directory entry
+                int record_offset, record_size;
 
-                memcpy(&record_offset, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record offset
-                memcpy(&record_size, page_data + bottom_offset, sizeof(int)); // Read record size
+                memcpy(&record_offset, page_data + bottom_offset, sizeof(int)); // Read record offset
+                memcpy(&record_size, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record size
 
 
                 if (record_size >= 0 && record_offset > 0 && record_offset + record_size <= 4096) {
                     temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
-                    bottom_offset -= sizeof(int) * 2; // Move up for the next slot directory entry
                 }
                 else {
                     break; // No more valid slot directory entries
@@ -160,14 +156,15 @@ public:
 
 
             for (const auto &slots: slot_directory) {
-                int record_offset = slots.first;
+                int record_end_offset = slots.first;
                 int record_size = slots.second;
+                int record_offset = record_end_offset - record_size; // Calculate start offset from end offset
 
-                long long id, manager_id;
-                memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
-                record_offset += sizeof(long long); // Move offset to read manager ID
-                memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
-                record_offset += sizeof(long long); // Move offset to read name length
+                int id, manager_id;
+                memcpy(&id, page_data + record_offset, sizeof(int)); // Read ID
+                record_offset += sizeof(int); // Move offset to read manager ID
+                memcpy(&manager_id, page_data + record_offset, sizeof(int)); // Read manager ID
+                record_offset += sizeof(int); // Move offset to read name length
 
 
 
@@ -237,17 +234,22 @@ private:
         //  - Use seekp() to seek to the offset of the correct page in the index file
 		//		indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
         indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
+        cout << "    [DEBUG] Attempting to add record ID " << record.id << " to page " << pageIndex << endl;
+        cout << "    [DEBUG] Page has " << page.records.size() << " records before insert" << endl;
 		//  - try insert_record_into_page()
 		//     - if it fails, then you'll need to either...
 		//			- go to next overflow page and try inserting there (keep doing this until you find a spot for the record)
 		//			- create an overflow page (if page.overflowPointerIndex == -1) using nextFreePage. update nextFreePage index and pageIndex.
         if (!page.insert_record_into_page(record)) {
+            cout << "    [DEBUG] Record did not fit in page " << pageIndex << ", handling overflow" << endl;
             // If the record cannot be inserted into the current page, check for overflow page
             if (page.overflowPointerIndex != -1) {
                 // There is an overflow page, try inserting there
+                cout << "    [DEBUG] Following overflow pointer to page " << page.overflowPointerIndex << endl;
                 addRecordToIndex(page.overflowPointerIndex, page, record);
             } else {
                 // No overflow page, create a new one
+                cout << "    [DEBUG] Creating new overflow page at index " << nextFreePage << endl;
                 Page overflowPage = Page(); // Create a new overflow page
                 overflowPage.insert_record_into_page(record); // Insert the record into the new overflow page
                 page.overflowPointerIndex = nextFreePage; // Update the overflow pointer to point to the new page
@@ -256,9 +258,15 @@ private:
                 // Write the new overflow page to the index file
                 indexFile.seekp(page.overflowPointerIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
                 overflowPage.write_into_data_file(indexFile); // After inserting the record, write the modified page back to the index file.
+                cout << "    [DEBUG] Overflow page written, now writing parent page back" << endl;
+                
+                // Also write the parent page back with updated overflow pointer
+                indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
+                page.write_into_data_file(indexFile);
             }
         } else {
             // If the record was successfully inserted into the current page, write it back to the index file
+            cout << "    [DEBUG] Record inserted successfully. Page now has " << page.records.size() << " records" << endl;
             indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
             // TODO:DONE After inserting the record, write the modified page back to the index file. 
             page.write_into_data_file(indexFile);
@@ -271,6 +279,8 @@ private:
     // Function to search for a record by ID in a given page of the index file
     void searchRecordByIdInPage(int pageIndex, int id) {
         // Open index file in binary mode for reading
+
+        cout << "Searching for record with ID " << id << " in page index " << pageIndex << "..." << endl;
         ifstream indexFile(fileName, ios::binary | ios::in);
 
         if(!indexFile) {
@@ -284,15 +294,30 @@ private:
 
         // Seek to the appropriate position in the index file
         indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
+        cout << "  [DEBUG] Seeking to byte offset: " << (pageIndex * Page_SIZE) << endl;
 
         // Read the page from the index file
         Page page;
         bool page_read = page.read_from_data_file(indexFile);
 
         if (!page_read) {
-            cerr << "Record with ID " << id << " not found in the index." << endl;
+            cerr << "  [ERROR] Failed to read page at index " << pageIndex << endl;
             indexFile.close();
             return;
+        }
+        
+        cout << "  [DEBUG] Page read successfully. Records in page: " << page.records.size() << endl;
+        cout << "  [DEBUG] Overflow pointer index: " << page.overflowPointerIndex << endl;
+        
+        // Print all record IDs in the current page for debugging
+        if (page.records.size() > 0) {
+            cout << "  [DEBUG] Record IDs in this page: ";
+            for (const auto &record : page.records) {
+                cout << record.id << " ";
+            }
+            cout << endl;
+        } else {
+            cout << "  [DEBUG] WARNING: Page contains 0 records!" << endl;
         }
         
         bool found = false;
@@ -307,6 +332,7 @@ private:
 
         if (!found && page.overflowPointerIndex != -1) {
             // If the record was not found in the current page, check the overflow page
+            cout << "  [DEBUG] Record not found, checking overflow page at index " << page.overflowPointerIndex << endl;
             searchRecordByIdInPage(page.overflowPointerIndex, id);
         } else if (!found) {
             cout << "Record with ID " << id << " not found in the index." << endl;
@@ -323,8 +349,13 @@ public:
         // Read CSV file and add records to index
         // Open the CSV file for reading
         ifstream csvFile(csvFileName);
+        if (!csvFile.is_open()) {
+            cerr << "Error: Unable to open CSV file." << endl;
+            return;
+        }
 
         string line;
+        int recordCount = 0;
         // Read each line from the CSV file
         while (getline(csvFile, line)) {
             // Parse the line and create a Record object
@@ -342,17 +373,29 @@ public:
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
             int hash_value = compute_hash_value(record.id);
             int pageIndex;
+            
+            //cout << "[DEBUG] Processing record " << recordCount++ << ": ID=" << record.id << ", hash=" << hash_value << endl;
 
             //   - Check if the page index is already in PageDirectory. If not, initialize it with nextFreePage and increment nextFreePage.
             if (PageDirectory[hash_value] == -1) {
                 pageIndex = nextFreePage;
                 PageDirectory[hash_value] = pageIndex;
                 nextFreePage++;
+                
+                //cout << "  [DEBUG] New page created at index " << pageIndex << " for hash value " << hash_value << endl;
             
                 Page newPage;
                 newPage.insert_record_into_page(record);
 
-                fstream indexFile(fileName, ios::binary | ios::in | ios::out | ios::trunc); // Open index file for writing (truncating existing content)
+                // Only truncate on first write, otherwise append
+                fstream indexFile;
+                if (pageIndex == 0) {
+                    // First time creating index file, truncate any existing file
+                    indexFile.open(fileName, ios::binary | ios::out | ios::trunc);
+                    indexFile.close();
+                }
+                // Open for read/write
+                indexFile.open(fileName, ios::binary | ios::in | ios::out);
                 if (!indexFile) {
                     cerr << "Error: Unable to open index file for writing." << endl;
                     continue;
@@ -366,11 +409,12 @@ public:
                 }
                 newPage.write_into_data_file(indexFile); // Write the new page to the index file
                 indexFile.close();
+                //cout << "  [DEBUG] Page written to file at offset " << (pageIndex * Page_SIZE) << endl;
             }
 
             else {
-                    // Page already exists for this bucket
                     pageIndex = PageDirectory[hash_value];
+                    //cout << "  [DEBUG] Using existing page at index " << pageIndex << " for hash value " << hash_value << endl;
                     
                     // Read the existing page
                     fstream indexFile(fileName, ios::binary | ios::in | ios::out);
@@ -395,10 +439,15 @@ public:
                         continue;
                     }
                     
+                    //cout << "  [DEBUG] Page read successfully with " << page.records.size() << " existing records" << endl;
+                    
                     // Insert the record into the page (handles overflow internally)
                     addRecordToIndex(pageIndex, page, record);
                 }
             }
+        cout << "Index creation from CSV file completed." << endl;
+        cout << "Total pages used: " << nextFreePage << endl;
+        cout << "Total records processed: " << recordCount << endl;
         // Close the CSV file
         csvFile.close();
     }
@@ -407,6 +456,11 @@ public:
     void findAndPrintEmployee(int id) {
         // Open index file in binary mode for reading
         ifstream indexFile(fileName, ios::binary | ios::in);
+
+        if (!indexFile) {
+            cerr << "Error: Unable to open index file " << fileName << " for searching." << endl;
+            return;
+        }
 
         // TODO: DONE
         //  - Compute hash value for the given ID using compute_hash_value() function
