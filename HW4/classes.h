@@ -10,20 +10,21 @@ using namespace std;
 
 class Record {
 public:
-    int id, manager_id; // Employee ID and their manager's ID
+    //long long is 8 bytes so we use that 
+    long long id, manager_id; // Employee ID and their manager's ID
     string bio, name; // Fixed length string to store employee name and biography
 
     Record(vector<string> &fields) {
-        id = stoi(fields[0]);
+        id = stoll(fields[0]);
         name = fields[1];
         bio = fields[2];
-        manager_id = stoi(fields[3]);
+        manager_id = stoll(fields[3]);
     }
 	
 	// Function to get the size of the record
-    int get_size() {
+    int get_size() const {
         // sizeof(int) is for name/bio size() in serialize function
-        return sizeof(id) + sizeof(manager_id) + sizeof(int) + name.size() + sizeof(int) + bio.size(); 
+        return (int)(sizeof(id) + sizeof(manager_id) + sizeof(int) + name.size() + sizeof(int) + bio.size()); 
     }
 
     // Function to serialize the record for writing to file
@@ -50,27 +51,28 @@ public:
 
 class Page {
 public:
+    static const int PAGE_SIZE = 4096; // Size of each page in bytes
+    
     vector<Record> records; // Data_Area containing the records
     vector<pair<int, int>> slot_directory; // Slot directory containing offset and size of each record
     int cur_size = sizeof(int); // Current size of the page including the overflow page pointer. if you also write the length of slot directory change it accordingly.
     int overflowPointerIndex;  // Initially set to -1, indicating the page has no overflow page. 
 							   // Update it to the position of the overflow page when one is created.
 
-    // Constructor
-    Page() : overflowPointerIndex(-1) {}
-
+    // Constructor 
+    Page() : cur_size(sizeof(int)), overflowPointerIndex(-1) {}
     // Function to insert a record into the page
     bool insert_record_into_page(Record r) {
         int record_size = r.get_size();
         int slot_size = sizeof(int) * 2;
-        if (cur_size + record_size + slot_size > 4096) { // Check if page size limit exceeded, considering slot directory size
+        if (cur_size + record_size + slot_size > PAGE_SIZE) { // Check if page size limit exceeded, considering slot directory size
             return false; // Cannot insert the record into this page
         } else {
             records.push_back(r);
             
             int offset = 0;
-            for (size_t i = 0; i < records.size(); i++) {
-              offset += records[i].get_size();
+            for (const auto &record: records) {
+              offset += record.get_size();
             }
             slot_directory.push_back({offset, record_size}); // Add offset and size to slot directory
             cur_size += record_size + slot_size;
@@ -82,7 +84,7 @@ public:
 
     // Function to write the page to a binary output stream. You may use
     void write_into_data_file(ostream &out) const {
-        char page_data[4096] = {0}; // Buffer to hold page data
+        char page_data[PAGE_SIZE] = {0}; // Buffer to hold page data
         int offset = 0;
 
         // Write records into page_data buffer
@@ -98,9 +100,9 @@ public:
         //  You should write the first entry of the slot_directory, 
         //  which have the info about the first record at the bottom of the page, before overflowPointerIndex.
 
-        int bottom_offset = 4096 - sizeof(int); // Start from the bottom of the page for slot directory and overflow pointer
+        int bottom_offset = PAGE_SIZE - sizeof(int); // Start from the bottom of the page for slot directory and overflow pointer
             
-        memcpy(page_data + bottom_offset, &overflowPointerIndex, sizeof(overflowPointerIndex)); // Write overflowPointerIndex at the end of the page
+        memcpy(page_data + bottom_offset, &overflowPointerIndex, sizeof(int)); // Write overflowPointerIndex at the end of the page
 
         for (int i = slot_directory.size() - 1; i >= 0; i--)
         {
