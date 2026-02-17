@@ -126,74 +126,71 @@ public:
         if (bytes_read != PAGE_SIZE) {
             // TODO: Done
             // Process data to fill the records, slot_directory, and overflowPointerIndex
-            if (bytes_read == 0) {
+            if (bytes_read > 0) 
                 cerr << "incomplete read: " << in.gcount() << "bytes\n";
-                return false;
+            return false;
+        }
+
+        records.clear();
+        slot_directory.clear();
+
+        int bottom_offset = PAGE_SIZE - (int)(sizeof(int)); // Start from the bottom of the page to read overflowPointerIndex and slot directory
+        memcpy(&overflowPointerIndex, page_data + bottom_offset, sizeof(int)); // Read overflowPointerIndex from the bottom of the page
+
+        vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
+        while (bottom_offset >= (int)(sizeof(int) * 2)) {
+            bottom_offset -= (int)(sizeof(int) * 2); // Move to the start of the next slot directory entry
+            int record_offset, record_size;
+
+            memcpy(&record_offset, page_data + bottom_offset, sizeof(int)); // Read record offset
+            memcpy(&record_size, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record size
+
+
+            if (record_size <= 0 || record_offset <= 0 || record_offset > PAGE_SIZE || record_size > record_offset) {
+                break; // No more valid slot directory entries
             }
+            temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
+        }
 
-            records.clear();
-            slot_directory.clear();
-
-            int bottom_offset = PAGE_SIZE - sizeof(int); // Start from the bottom of the page to read overflowPointerIndex and slot directory
-            memcpy(&overflowPointerIndex, page_data + bottom_offset, sizeof(int)); // Read overflowPointerIndex from the bottom of the page
-
-            vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
-            while (bottom_offset >= (int)(sizeof(int) * 2)) {
-                bottom_offset -= (int)(sizeof(int) * 2); // Move to the start of the next slot directory entry
-                int record_offset, record_size;
-
-                memcpy(&record_offset, page_data + bottom_offset, sizeof(int)); // Read record offset
-                memcpy(&record_size, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record size
+        for (int i = (int)temp_slots.size() - 1; i >= 0; --i) {
+            slot_directory.push_back(temp_slots[i]); // Add valid slot directory entries to the page's slot_directory
+        }
 
 
-                if (record_size <= 0 || record_offset < 0 || record_offset + record_size > PAGE_SIZE) {
-                    break; // No more valid slot directory entries
-                }
-                temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
-            }
+        for (const auto &slots: slot_directory) {
+            int record_end_offset = slots.first;
+            int record_size = slots.second;
+            int record_offset = record_end_offset - record_size; // Calculate start offset from end offset
 
-            for (int i = temp_slots.size() - 1; i >= 0; i--) {
-                slot_directory.push_back(temp_slots[i]); // Add valid slot directory entries to the page's slot_directory
-            }
-
-
-            for (const auto &slots: slot_directory) {
-                int record_end_offset = slots.first;
-                int record_size = slots.second;
-                int record_offset = record_end_offset - record_size; // Calculate start offset from end offset
-
-                long long id, manager_id;
-                memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
-                record_offset += sizeof(long long); // Move offset to read manager ID
-                memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
-                record_offset += sizeof(long long); // Move offset to read name length
+            long long id, manager_id;
+            memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
+            record_offset += sizeof(long long); // Move offset to read manager ID
+            memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
+            record_offset += sizeof(long long); // Move offset to read name length
 
 
-                int name_len, bio_len;
-                memcpy(&name_len, page_data + record_offset, sizeof(int)); // Read name length
-                record_offset += sizeof(int); // Move offset to read name
+            int name_len, bio_len;
+            memcpy(&name_len, page_data + record_offset, sizeof(int)); // Read name length
+            record_offset += sizeof(int); // Move offset to read name
 
-                string name(page_data + record_offset, name_len); // Read name
-                record_offset += name_len; // Move offset to read bio length
+            string name(page_data + record_offset, name_len); // Read name
+            record_offset += name_len; // Move offset to read bio length
 
-                memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
-                record_offset += sizeof(int); // Move offset to read bio
+            memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
+            record_offset += sizeof(int); // Move offset to read bio
 
-                string bio(page_data + record_offset, bio_len); // Read bio
+            string bio(page_data + record_offset, bio_len); // Read bio
 
-                vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
-                records.emplace_back(fields);
-            }
-
+            vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
+            records.emplace_back(fields);
+        }
             cur_size = (int)(sizeof(int));
-            for (const auto &record: records) {
+            for (const auto &record: records)
                 cur_size += record.get_size() + (int)(sizeof(int) * 2); // Update current size of the page
-            }
 
             return true;
-        }
-    }
-};
+        }   
+    };
 
 class HashIndex {
 private:
@@ -206,7 +203,7 @@ private:
     string fileName;
 
     // Function to compute hash value for a given ID
-    int compute_hash_value(int id) {
+    int compute_hash_value(long long id) {
         int hash_value;
 
         // TODO:DONE Implement the hash function h = id mod 2^8
@@ -227,16 +224,16 @@ private:
 		// TODO:DONE
         //  - Use seekp() to seek to the offset of the correct page in the index file
 		//		indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
-        indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
+        indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
         Page page;
         bool ok = page.read_from_data_file(indexFile);
         if (!ok) {
             cerr << "Error: Failed to read page at index " << pageIndex << endl;
-            indexFile.close();
             return;
         }
-        
-        if (!page.insert_record_into_page(record)) {
+        indexFile.close();
+
+        if (page.insert_record_into_page(record)) {
             // write updated page back to index file
             fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
             indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
@@ -363,7 +360,7 @@ public:
                 newPage.insert_record_into_page(record);
 
                 // Only truncate on first write, otherwise append
-                fstream indexFileWrite;
+                fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
                 indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
                 newPage.write_into_data_file(indexFileWrite);
                 indexFileWrite.close();
@@ -383,26 +380,12 @@ public:
     // Function to search for a record by ID in the hash index
     void findAndPrintEmployee(int id) {
         // Open index file in binary mode for reading
-        ifstream indexFile(fileName, ios::binary | ios::in);
-
-        if (!indexFile) {
-            cerr << "Error: Unable to open index file " << fileName << " for searching." << endl;
+        int h = compute_hash_value(id);
+        if (PageDirectory[h] == -1) {
+            cout << "Record with ID " << id << " not found.\n";
             return;
         }
-
-        // TODO: DONE
-        //  - Compute hash value for the given ID using compute_hash_value() function
-        //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
-
-        int hash_value = compute_hash_value(id);
-        if (PageDirectory[hash_value] != -1) {
-            searchRecordByIdInPage(PageDirectory[hash_value], id);
-        } else {
-            cout << "Record with ID " << id << " not found in the index." << endl;
-        }
-
-        // Close the index file
-        indexFile.close();
+        searchRecordByIdInPage(PageDirectory[h], id);
     }
 };
 
