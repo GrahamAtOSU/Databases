@@ -1,3 +1,8 @@
+/******************************************************************************
+ * AUTHORS : Samuel Garcia Lopez, Graham Glazner
+ * ONIDS   : garcsamu, glaznerg
+ * EMAILS  : garcsamu@oregonstate.edu, glazner@oregonstate.edu
+ ******************************************************************************/
 
 #include <string>
 #include <iostream>
