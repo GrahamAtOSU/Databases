@@ -10,20 +10,21 @@ using namespace std;
 
 class Record {
 public:
-    int id, manager_id; // Employee ID and their manager's ID
+    //long long is 8 bytes so we use that 
+    long long id, manager_id; // Employee ID and their manager's ID
     string bio, name; // Fixed length string to store employee name and biography
 
     Record(vector<string> &fields) {
-        id = stoi(fields[0]);
+        id = stoll(fields[0]);
         name = fields[1];
         bio = fields[2];
-        manager_id = stoi(fields[3]);
+        manager_id = stoll(fields[3]);
     }
 	
 	// Function to get the size of the record
-    int get_size() {
+    int get_size() const {
         // sizeof(int) is for name/bio size() in serialize function
-        return sizeof(id) + sizeof(manager_id) + sizeof(int) + name.size() + sizeof(int) + bio.size(); 
+        return (int)(sizeof(id) + sizeof(manager_id) + sizeof(int) + name.size() + sizeof(int) + bio.size()); 
     }
 
     // Function to serialize the record for writing to file
@@ -50,27 +51,28 @@ public:
 
 class Page {
 public:
+    static const int PAGE_SIZE = 4096; // Size of each page in bytes
+    
     vector<Record> records; // Data_Area containing the records
     vector<pair<int, int>> slot_directory; // Slot directory containing offset and size of each record
     int cur_size = sizeof(int); // Current size of the page including the overflow page pointer. if you also write the length of slot directory change it accordingly.
     int overflowPointerIndex;  // Initially set to -1, indicating the page has no overflow page. 
 							   // Update it to the position of the overflow page when one is created.
 
-    // Constructor
-    Page() : overflowPointerIndex(-1) {}
-
+    // Constructor 
+    Page() : cur_size(sizeof(int)), overflowPointerIndex(-1) {}
     // Function to insert a record into the page
     bool insert_record_into_page(Record r) {
         int record_size = r.get_size();
         int slot_size = sizeof(int) * 2;
-        if (cur_size + record_size + slot_size > 4096) { // Check if page size limit exceeded, considering slot directory size
+        if (cur_size + record_size + slot_size > PAGE_SIZE) { // Check if page size limit exceeded, considering slot directory size
             return false; // Cannot insert the record into this page
         } else {
             records.push_back(r);
             
             int offset = 0;
-            for (size_t i = 0; i < records.size(); i++) {
-              offset += records[i].get_size();
+            for (const auto &record: records) {
+              offset += record.get_size();
             }
             slot_directory.push_back({offset, record_size}); // Add offset and size to slot directory
             cur_size += record_size + slot_size;
@@ -82,7 +84,7 @@ public:
 
     // Function to write the page to a binary output stream. You may use
     void write_into_data_file(ostream &out) const {
-        char page_data[4096] = {0}; // Buffer to hold page data
+        char page_data[PAGE_SIZE] = {0}; // Buffer to hold page data
         int offset = 0;
 
         // Write records into page_data buffer
@@ -98,14 +100,13 @@ public:
         //  You should write the first entry of the slot_directory, 
         //  which have the info about the first record at the bottom of the page, before overflowPointerIndex.
 
-        int bottom_offset = 4096 - sizeof(int); // Start from the bottom of the page for slot directory and overflow pointer
+        int bottom_offset = PAGE_SIZE - sizeof(int); // Start from the bottom of the page for slot directory and overflow pointer
             
-        memcpy(page_data + bottom_offset, &overflowPointerIndex, sizeof(overflowPointerIndex)); // Write overflowPointerIndex at the end of the page
+        memcpy(page_data + bottom_offset, &overflowPointerIndex, sizeof(int)); // Write overflowPointerIndex at the end of the page
 
         for (int i = slot_directory.size() - 1; i >= 0; i--)
         {
             bottom_offset -= sizeof(int);
-            //we use long long here because we 8 bytes for the id and manger id
             memcpy(page_data + bottom_offset, &slot_directory[i].second, sizeof(int)); // Write record size
             bottom_offset -= sizeof(int);
             memcpy(page_data + bottom_offset, &slot_directory[i].first, sizeof(int)); // Write record offset        
@@ -118,91 +119,78 @@ public:
 
     // Function to read a page from a binary input stream
     bool read_from_data_file(istream &in) {
-        char page_data[4096] = {0}; // Buffer to hold page data
-        in.read(page_data, 4096); // Read data from input stream
+        char page_data[PAGE_SIZE] = {0}; // Buffer to hold page data
+        in.read(page_data, PAGE_SIZE); // Read data from input stream
 
         streamsize bytes_read = in.gcount();
-        if (bytes_read == 4096) {
+        if (bytes_read != PAGE_SIZE) {
             // TODO: Done
             // Process data to fill the records, slot_directory, and overflowPointerIndex
-            
-            int bottom_offset = 4096 - sizeof(int); // Start from the bottom of the page to read overflowPointerIndex and slot directory
-            
-            memcpy(&overflowPointerIndex, page_data + bottom_offset, sizeof(int)); // Read overflowPointerIndex from the bottom of the page
+            if (bytes_read > 0) 
+                cerr << "incomplete read: " << in.gcount() << "bytes\n";
+            return false;
+        }
 
-            slot_directory.clear();
-            records.clear();    
+        records.clear();
+        slot_directory.clear();
+
+        int bottom_offset = PAGE_SIZE - (int)(sizeof(int)); // Start from the bottom of the page to read overflowPointerIndex and slot directory
+        memcpy(&overflowPointerIndex, page_data + bottom_offset, sizeof(int)); // Read overflowPointerIndex from the bottom of the page
+
+        vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
+        while (bottom_offset >= (int)(sizeof(int) * 2)) {
+            bottom_offset -= (int)(sizeof(int) * 2); // Move to the start of the next slot directory entry
+            int record_offset, record_size;
+
+            memcpy(&record_offset, page_data + bottom_offset, sizeof(int)); // Read record offset
+            memcpy(&record_size, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record size
 
 
-            bottom_offset -= sizeof(int); // Move up to read slot directory entries
-
-
-            vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
-            while (bottom_offset >= 0) {
-                int record_size, record_offset;
-
-                memcpy(&record_offset, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record offset
-                memcpy(&record_size, page_data + bottom_offset, sizeof(int)); // Read record size
-
-
-                if (record_size >= 0 && record_offset > 0 && record_offset + record_size <= 4096) {
-                    temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
-                    bottom_offset -= sizeof(int) * 2; // Move up for the next slot directory entry
-                }
-                else {
-                    break; // No more valid slot directory entries
-                }
+            if (record_size <= 0 || record_offset <= 0 || record_offset > PAGE_SIZE || record_size > record_offset) {
+                break; // No more valid slot directory entries
             }
+            temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
+        }
 
-            for (int i = temp_slots.size() - 1; i >= 0; i--) {
-                slot_directory.push_back(temp_slots[i]); // Add valid slot directory entries to the page's slot_directory
-            }
-
-
-            for (const auto &slots: slot_directory) {
-                int record_offset = slots.first;
-                int record_size = slots.second;
-
-                long long id, manager_id;
-                memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
-                record_offset += sizeof(long long); // Move offset to read manager ID
-                memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
-                record_offset += sizeof(long long); // Move offset to read name length
+        for (int i = (int)temp_slots.size() - 1; i >= 0; --i) {
+            slot_directory.push_back(temp_slots[i]); // Add valid slot directory entries to the page's slot_directory
+        }
 
 
+        for (const auto &slots: slot_directory) {
+            int record_end_offset = slots.first;
+            int record_size = slots.second;
+            int record_offset = record_end_offset - record_size; // Calculate start offset from end offset
 
-                int name_len, bio_len;
-                memcpy(&name_len, page_data + record_offset, sizeof(int)); // Read name length
-                record_offset += sizeof(int); // Move offset to read name
+            long long id, manager_id;
+            memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
+            record_offset += sizeof(long long); // Move offset to read manager ID
+            memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
+            record_offset += sizeof(long long); // Move offset to read name length
 
-                string name(page_data + record_offset, name_len); // Read name
-                record_offset += name_len * sizeof(char); // Move offset to read bio length
 
-                memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
-                record_offset += sizeof(int); // Move offset to read bio
+            int name_len, bio_len;
+            memcpy(&name_len, page_data + record_offset, sizeof(int)); // Read name length
+            record_offset += sizeof(int); // Move offset to read name
 
-                string bio(page_data + record_offset, bio_len); // Read bio
+            string name(page_data + record_offset, name_len); // Read name
+            record_offset += name_len; // Move offset to read bio length
 
-                vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
-                Record record(fields); // Construct Record object
-                records.push_back(record); // Add record to the page's records vector
-            }
+            memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
+            record_offset += sizeof(int); // Move offset to read bio
 
-            cur_size = sizeof(int);
-            for (auto &record: records) {
-                cur_size += record.get_size() + sizeof(int) * 2; // Update current size of the page
-            }
+            string bio(page_data + record_offset, bio_len); // Read bio
+
+            vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
+            records.emplace_back(fields);
+        }
+            cur_size = (int)(sizeof(int));
+            for (const auto &record: records)
+                cur_size += record.get_size() + (int)(sizeof(int) * 2); // Update current size of the page
 
             return true;
-        }
-
-        if (bytes_read > 0) {
-            cerr << "Incomplete read: Expected 4096 bytes, but only read " << bytes_read << " bytes." << endl;
-        }
-
-        return false;
-    }
-};
+        }   
+    };
 
 class HashIndex {
 private:
@@ -215,16 +203,16 @@ private:
     string fileName;
 
     // Function to compute hash value for a given ID
-    int compute_hash_value(int id) {
+    int compute_hash_value(long long id) {
         int hash_value;
 
         // TODO:DONE Implement the hash function h = id mod 2^8
-        hash_value = id % 256;
+        hash_value = (int)(id % 256);
         return hash_value;
     }
 
     // Function to add a new record to an existing page in the index file
-    void addRecordToIndex(int pageIndex, Page &page, Record &record) {
+    void addRecordToIndex(int pageIndex, Record &record) {
         // Open index file in binary mode for updating
         fstream indexFile(fileName, ios::binary | ios::in | ios::out);
 
@@ -236,41 +224,50 @@ private:
 		// TODO:DONE
         //  - Use seekp() to seek to the offset of the correct page in the index file
 		//		indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
-        indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
-		//  - try insert_record_into_page()
-		//     - if it fails, then you'll need to either...
-		//			- go to next overflow page and try inserting there (keep doing this until you find a spot for the record)
-		//			- create an overflow page (if page.overflowPointerIndex == -1) using nextFreePage. update nextFreePage index and pageIndex.
-        if (!page.insert_record_into_page(record)) {
-            // If the record cannot be inserted into the current page, check for overflow page
-            if (page.overflowPointerIndex != -1) {
-                // There is an overflow page, try inserting there
-                addRecordToIndex(page.overflowPointerIndex, page, record);
-            } else {
-                // No overflow page, create a new one
-                Page overflowPage = Page(); // Create a new overflow page
-                overflowPage.insert_record_into_page(record); // Insert the record into the new overflow page
-                page.overflowPointerIndex = nextFreePage; // Update the overflow pointer to point to the new page
-                nextFreePage++; // Increment nextFreePage for the next available page index
-
-                // Write the new overflow page to the index file
-                indexFile.seekp(page.overflowPointerIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
-                overflowPage.write_into_data_file(indexFile); // After inserting the record, write the modified page back to the index file.
-            }
-        } else {
-            // If the record was successfully inserted into the current page, write it back to the index file
-            indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
-            // TODO:DONE After inserting the record, write the modified page back to the index file. 
-            page.write_into_data_file(indexFile);
+        indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
+        Page page;
+        bool ok = page.read_from_data_file(indexFile);
+        if (!ok) {
+            cerr << "Error: Failed to read page at index " << pageIndex << endl;
+            return;
         }
-
-        // Close the index file
         indexFile.close();
+
+        if (page.insert_record_into_page(record)) {
+            // write updated page back to index file
+            fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
+            indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
+            page.write_into_data_file(indexFileWrite);
+            indexFileWrite.close();
+        } 
+        else 
+        {
+            if (page.overflowPointerIndex != -1) {
+                addRecordToIndex(page.overflowPointerIndex, record);
+            }
+            else{
+                int overflow_index = nextFreePage++;
+                page.overflowPointerIndex = overflow_index;
+
+                Page overflow_page;
+                overflow_page.insert_record_into_page(record);
+
+                fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
+                indexFileWrite.seekp(overflow_index * Page_SIZE, ios::beg);
+                overflow_page.write_into_data_file(indexFileWrite);
+
+                indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
+                page.write_into_data_file(indexFileWrite);
+                indexFileWrite.close();
+            }
+        }
     }
 
     // Function to search for a record by ID in a given page of the index file
     void searchRecordByIdInPage(int pageIndex, int id) {
         // Open index file in binary mode for reading
+
+        cout << "Searching for record with ID " << id << " in page index " << pageIndex << "..." << endl;
         ifstream indexFile(fileName, ios::binary | ios::in);
 
         if(!indexFile) {
@@ -284,34 +281,31 @@ private:
 
         // Seek to the appropriate position in the index file
         indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
+        cout << "  [DEBUG] Seeking to byte offset: " << (pageIndex * Page_SIZE) << endl;
 
         // Read the page from the index file
         Page page;
         bool page_read = page.read_from_data_file(indexFile);
 
         if (!page_read) {
-            cerr << "Record with ID " << id << " not found in the index." << endl;
-            indexFile.close();
+            cerr << "  [ERROR] Failed to read page at index " << pageIndex << endl;
             return;
         }
-        
-        bool found = false;
+
         for (auto &record: page.records) {
             if (record.id == id) {
                 cout << "Record found in page index " << pageIndex << ":" << endl;
                 record.print();
-                found = true;
-                break;
+                return;
             }
         }
 
-        if (!found && page.overflowPointerIndex != -1) {
-            // If the record was not found in the current page, check the overflow page
+        if (page.overflowPointerIndex != -1) {
+            cout << "Record with ID " << id << " not found in page index " << pageIndex << ". Checking overflow page at index " << page.overflowPointerIndex << "..." << endl;
             searchRecordByIdInPage(page.overflowPointerIndex, id);
-        } else if (!found) {
+        } else {
             cout << "Record with ID " << id << " not found in the index." << endl;
-        }  
-        indexFile.close();
+        }
     }
 
 public:
@@ -320,11 +314,26 @@ public:
 
     // Function to create hash index from Employee CSV file
     void createFromFile(string csvFileName) {
+        //Truncate and create the index file if it already exists, otherwise create a new file
+        {
+            ofstream indexFile(fileName, ios::binary | ios::out | ios::trunc);
+            if (!indexFile) {
+                cerr << "Error: Unable to create index file." << endl;
+                return;
+            }
+        }
+
+
         // Read CSV file and add records to index
         // Open the CSV file for reading
         ifstream csvFile(csvFileName);
+        if (!csvFile.is_open()) {
+            cerr << "Error: Unable to open CSV file." << endl;
+            return;
+        }
 
         string line;
+        int recordCount = 0;
         // Read each line from the CSV file
         while (getline(csvFile, line)) {
             // Parse the line and create a Record object
@@ -341,64 +350,29 @@ public:
             //   - Get the page index from PageDirectory. If it's not in PageDirectory, define a new page using nextFreePage.
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
             int hash_value = compute_hash_value(record.id);
-            int pageIndex;
 
             //   - Check if the page index is already in PageDirectory. If not, initialize it with nextFreePage and increment nextFreePage.
             if (PageDirectory[hash_value] == -1) {
-                pageIndex = nextFreePage;
+                int pageIndex = nextFreePage++;
                 PageDirectory[hash_value] = pageIndex;
-                nextFreePage++;
-            
+                
                 Page newPage;
                 newPage.insert_record_into_page(record);
 
-                fstream indexFile(fileName, ios::binary | ios::in | ios::out | ios::trunc); // Open index file for writing (truncating existing content)
-                if (!indexFile) {
-                    cerr << "Error: Unable to open index file for writing." << endl;
-                    continue;
-                }
-            
-                indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
-                if (indexFile.fail()) {
-                    cerr << "Error: Failed to seek to the correct position in the index file." << endl;
-                    indexFile.close();
-                    continue;
-                }
-                newPage.write_into_data_file(indexFile); // Write the new page to the index file
-                indexFile.close();
+                // Only truncate on first write, otherwise append
+                fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
+                indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
+                newPage.write_into_data_file(indexFileWrite);
+                indexFileWrite.close();
             }
-
             else {
-                    // Page already exists for this bucket
-                    pageIndex = PageDirectory[hash_value];
-                    
-                    // Read the existing page
-                    fstream indexFile(fileName, ios::binary | ios::in | ios::out);
-                    if (!indexFile) {
-                        cerr << "Error: Unable to open index file for reading." << endl;
-                        continue;
-                    }
-                    
-                    indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
-                    if (indexFile.fail()) {
-                        cerr << "Error: Seek failed when reading page " << pageIndex << endl;
-                        indexFile.close();
-                        continue;
-                    }
-                    
-                    Page page;
-                    bool success = page.read_from_data_file(indexFile);
-                    indexFile.close();
-                    
-                    if (!success) {
-                        cerr << "Error: Failed to read page " << pageIndex << endl;
-                        continue;
-                    }
-                    
-                    // Insert the record into the page (handles overflow internally)
-                    addRecordToIndex(pageIndex, page, record);
+                    addRecordToIndex(PageDirectory[hash_value], record);
                 }
+                recordCount++;
             }
+        cout << "Index creation from CSV file completed." << endl;
+        cout << "Total pages used: " << nextFreePage << endl;
+        cout << "Total records processed: " << recordCount << endl;
         // Close the CSV file
         csvFile.close();
     }
@@ -406,21 +380,12 @@ public:
     // Function to search for a record by ID in the hash index
     void findAndPrintEmployee(int id) {
         // Open index file in binary mode for reading
-        ifstream indexFile(fileName, ios::binary | ios::in);
-
-        // TODO: DONE
-        //  - Compute hash value for the given ID using compute_hash_value() function
-        //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
-
-        int hash_value = compute_hash_value(id);
-        if (PageDirectory[hash_value] != -1) {
-            searchRecordByIdInPage(PageDirectory[hash_value], id);
-        } else {
-            cout << "Record with ID " << id << " not found in the index." << endl;
+        int h = compute_hash_value(id);
+        if (PageDirectory[h] == -1) {
+            cout << "Record with ID " << id << " not found.\n";
+            return;
         }
-
-        // Close the index file
-        indexFile.close();
+        searchRecordByIdInPage(PageDirectory[h], id);
     }
 };
 
