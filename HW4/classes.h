@@ -210,7 +210,7 @@ private:
         int hash_value;
 
         // TODO:DONE Implement the hash function h = id mod 2^8
-        hash_value = id % 256;
+        hash_value = (int)(id % 256);
         return hash_value;
     }
 
@@ -228,46 +228,42 @@ private:
         //  - Use seekp() to seek to the offset of the correct page in the index file
 		//		indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
         indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
-        cout << "    [DEBUG] Attempting to add record ID " << record.id << " to page " << pageIndex << endl;
-        cout << "    [DEBUG] Page has " << page.records.size() << " records before insert" << endl;
-		//  - try insert_record_into_page()
-		//     - if it fails, then you'll need to either...
-		//			- go to next overflow page and try inserting there (keep doing this until you find a spot for the record)
-		//			- create an overflow page (if page.overflowPointerIndex == -1) using nextFreePage. update nextFreePage index and pageIndex.
-        if (!page.insert_record_into_page(record)) {
-            cout << "    [DEBUG] Record did not fit in page " << pageIndex << ", handling overflow" << endl;
-            // If the record cannot be inserted into the current page, check for overflow page
-            if (page.overflowPointerIndex != -1) {
-                // There is an overflow page, try inserting there
-                cout << "    [DEBUG] Following overflow pointer to page " << page.overflowPointerIndex << endl;
-                addRecordToIndex(page.overflowPointerIndex, page, record);
-            } else {
-                // No overflow page, create a new one
-                cout << "    [DEBUG] Creating new overflow page at index " << nextFreePage << endl;
-                Page overflowPage = Page(); // Create a new overflow page
-                overflowPage.insert_record_into_page(record); // Insert the record into the new overflow page
-                page.overflowPointerIndex = nextFreePage; // Update the overflow pointer to point to the new page
-                nextFreePage++; // Increment nextFreePage for the next available page index
-
-                // Write the new overflow page to the index file
-                indexFile.seekp(page.overflowPointerIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
-                overflowPage.write_into_data_file(indexFile); // After inserting the record, write the modified page back to the index file.
-                cout << "    [DEBUG] Overflow page written, now writing parent page back" << endl;
-                
-                // Also write the parent page back with updated overflow pointer
-                indexFile.seekp(pageIndex * Page_SIZE, ios::beg);
-                page.write_into_data_file(indexFile);
-            }
-        } else {
-            // If the record was successfully inserted into the current page, write it back to the index file
-            cout << "    [DEBUG] Record inserted successfully. Page now has " << page.records.size() << " records" << endl;
-            indexFile.seekp(pageIndex * Page_SIZE, ios::beg); // Seek to the appropriate position in the index file
-            // TODO:DONE After inserting the record, write the modified page back to the index file. 
-            page.write_into_data_file(indexFile);
+        Page page;
+        bool ok = page.read_from_data_file(indexFile);
+        if (!ok) {
+            cerr << "Error: Failed to read page at index " << pageIndex << endl;
+            indexFile.close();
+            return;
         }
+        
+        if (!page.insert_record_into_page(record)) {
+            // write updated page back to index file
+            fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
+            indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
+            page.write_into_data_file(indexFileWrite);
+            indexFileWrite.close();
+        } 
+        else 
+        {
+            if (page.overflowPointerIndex != -1) {
+                addRecordToIndex(page.overflowPointerIndex, page,  record);
+            }
+            else{
+                int overflow_index = nextFreePage++;
+                page.overflowPointerIndex = overflow_index;
 
-        // Close the index file
-        indexFile.close();
+                Page overflow_page;
+                overflow_page.insert_record_into_page(record);
+
+                fstream indexFileWrite(fileName, ios::binary | ios::in | ios::out);
+                indexFileWrite.seekp(overflow_index * Page_SIZE, ios::beg);
+                overflow_page.write_into_data_file(indexFileWrite);
+
+                indexFileWrite.seekp(pageIndex * Page_SIZE, ios::beg);
+                page.write_into_data_file(indexFileWrite);
+                indexFileWrite.close();
+            }
+        }
     }
 
     // Function to search for a record by ID in a given page of the index file
