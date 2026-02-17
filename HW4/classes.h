@@ -85,10 +85,21 @@ public:
             offset += serialized.size();
         }
 
-        // TODO:
+        // TODO:DONE
         //  - Write slot_directory in reverse order into page_data buffer.
         //  - Write overflowPointerIndex into page_data buffer.
         //  You should write the first entry of the slot_directory, which have the info about the first record at the bottom of the page, before overflowPointerIndex.
+        offset = 4096 - sizeof(int); // Start writing from the end of the page for slot directory and overflow pointer 
+        // Write overflowPointerIndex
+        memcpy(page_data + offset, &overflowPointerIndex, sizeof(overflowPointerIndex));
+        offset -= sizeof(int); // Move back for slot directory entries
+        // Write slot directory entries in reverse order
+        for (const auto &entry: slot_directory) {
+            offset -= sizeof(int);
+            memcpy(page_data + offset, &entry.first, sizeof(int)); // Write record offset
+            offset -= sizeof(int);
+            memcpy(page_data + offset, &entry.second, sizeof(int)); // Write record size
+        }
 
         // Write the page_data buffer to the output stream
         out.write(page_data, sizeof(page_data));
@@ -102,6 +113,16 @@ public:
         streamsize bytes_read = in.gcount();
         if (bytes_read == 4096) {
             // TODO: Process data to fill the records, slot_directory, and overflowPointerIndex
+            int offset = 0; // Offset to keep track of current position in page_data buffer
+            // Go to end of the page to read overflowPointerIndex and slot_directory information.
+            
+            // read id oss.write(reinterpret_cast<const char *>(&id), sizeof(id));
+            // read manager_id oss.write(reinterpret_cast<const char *>(&manager_id), sizeof(manager_id));
+            // read name_len
+            // read name
+            // read bio_len 
+            // read bio string
+
             return true;
         }
 
