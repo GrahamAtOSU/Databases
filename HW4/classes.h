@@ -119,37 +119,37 @@ public:
 
     // Function to read a page from a binary input stream
     bool read_from_data_file(istream &in) {
-        char page_data[4096] = {0}; // Buffer to hold page data
-        in.read(page_data, 4096); // Read data from input stream
+        char page_data[PAGE_SIZE] = {0}; // Buffer to hold page data
+        in.read(page_data, PAGE_SIZE); // Read data from input stream
 
         streamsize bytes_read = in.gcount();
-        if (bytes_read == 4096) {
+        if (bytes_read != PAGE_SIZE) {
             // TODO: Done
             // Process data to fill the records, slot_directory, and overflowPointerIndex
-            
-            int bottom_offset = 4096 - sizeof(int); // Start from the bottom of the page to read overflowPointerIndex and slot directory
-            
+            if (bytes_read == 0) {
+                cerr << "incomplete read: " << in.gcount() << "bytes\n";
+                return false;
+            }
+
+            records.clear();
+            slot_directory.clear();
+
+            int bottom_offset = PAGE_SIZE - sizeof(int); // Start from the bottom of the page to read overflowPointerIndex and slot directory
             memcpy(&overflowPointerIndex, page_data + bottom_offset, sizeof(int)); // Read overflowPointerIndex from the bottom of the page
 
-            slot_directory.clear();
-            records.clear();    
-
-
             vector<pair<int, int>> temp_slots; // Temporary vector to hold slot directory entries while reading
-            while (bottom_offset >= sizeof(int) * 2) {
-                bottom_offset -= sizeof(int) * 2; // Move to the start of the next slot directory entry
+            while (bottom_offset >= (int)(sizeof(int) * 2)) {
+                bottom_offset -= (int)(sizeof(int) * 2); // Move to the start of the next slot directory entry
                 int record_offset, record_size;
 
                 memcpy(&record_offset, page_data + bottom_offset, sizeof(int)); // Read record offset
                 memcpy(&record_size, page_data + bottom_offset + sizeof(int), sizeof(int)); // Read record size
 
 
-                if (record_size >= 0 && record_offset > 0 && record_offset + record_size <= 4096) {
-                    temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
-                }
-                else {
+                if (record_size <= 0 || record_offset < 0 || record_offset + record_size > PAGE_SIZE) {
                     break; // No more valid slot directory entries
                 }
+                temp_slots.push_back({record_offset, record_size}); // Store slot directory entry
             }
 
             for (int i = temp_slots.size() - 1; i >= 0; i--) {
@@ -162,12 +162,11 @@ public:
                 int record_size = slots.second;
                 int record_offset = record_end_offset - record_size; // Calculate start offset from end offset
 
-                int id, manager_id;
-                memcpy(&id, page_data + record_offset, sizeof(int)); // Read ID
-                record_offset += sizeof(int); // Move offset to read manager ID
-                memcpy(&manager_id, page_data + record_offset, sizeof(int)); // Read manager ID
-                record_offset += sizeof(int); // Move offset to read name length
-
+                long long id, manager_id;
+                memcpy(&id, page_data + record_offset, sizeof(long long)); // Read ID
+                record_offset += sizeof(long long); // Move offset to read manager ID
+                memcpy(&manager_id, page_data + record_offset, sizeof(long long)); // Read manager ID
+                record_offset += sizeof(long long); // Move offset to read name length
 
 
                 int name_len, bio_len;
@@ -175,7 +174,7 @@ public:
                 record_offset += sizeof(int); // Move offset to read name
 
                 string name(page_data + record_offset, name_len); // Read name
-                record_offset += name_len * sizeof(char); // Move offset to read bio length
+                record_offset += name_len; // Move offset to read bio length
 
                 memcpy(&bio_len, page_data + record_offset, sizeof(int)); // Read bio length
                 record_offset += sizeof(int); // Move offset to read bio
@@ -183,23 +182,16 @@ public:
                 string bio(page_data + record_offset, bio_len); // Read bio
 
                 vector<string> fields = {to_string(id), name, bio, to_string(manager_id)}; // Create fields vector
-                Record record(fields); // Construct Record object
-                records.push_back(record); // Add record to the page's records vector
+                records.emplace_back(fields);
             }
 
-            cur_size = sizeof(int);
-            for (auto &record: records) {
-                cur_size += record.get_size() + sizeof(int) * 2; // Update current size of the page
+            cur_size = (int)(sizeof(int));
+            for (const auto &record: records) {
+                cur_size += record.get_size() + (int)(sizeof(int) * 2); // Update current size of the page
             }
 
             return true;
         }
-
-        if (bytes_read > 0) {
-            cerr << "Incomplete read: Expected 4096 bytes, but only read " << bytes_read << " bytes." << endl;
-        }
-
-        return false;
     }
 };
 
