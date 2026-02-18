@@ -224,7 +224,9 @@ private:
             return;
         }
 
-        for (auto &[pageIdx, pagePair] : buffer) {
+        for (auto it = buffer.begin(); it != buffer.end(); ++it) {
+            int pageIdx = it->first;
+            pair<Page, bool> &pagePair = it->second;
             if (pagePair.second) { // If the page is dirty, write it back to the file
                 indexFile.seekp(pageIdx * Page_SIZE, ios::beg);
                 pagePair.first.write_into_data_file(indexFile);
