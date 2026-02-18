@@ -202,6 +202,8 @@ private:
     int nextFreePage; // Next place to write a bucket
     string fileName;
 
+    unordered_map<int, pair<Page, bool>> buffer; // Buffer to hold pages in memory, mapping page index to a pair of Page and a dirty flag
+
     // Function to compute hash value for a given ID
     int compute_hash_value(long long id) {
         int hash_value;
@@ -210,6 +212,31 @@ private:
         hash_value = (int)(id % 256);
         return hash_value;
     }
+    //helper funcs for buffer handeling
+    void flush_buffer()
+    {
+        if (buffer.empty())
+            return;
+
+        fstream indexFile(fileName, ios::binary | ios::in | ios::out);
+        if (!indexFile) {
+            cerr << "Error: Unable to open index file for flushing buffer." << endl;
+            return;
+        }
+
+        for (auto &[pageIdx, pagePair] : buffer) {
+            if (pagePair.second) { // If the page is dirty, write it back to the file
+                indexFile.seekp(pageIdx * Page_SIZE, ios::beg);
+                pagePair.first.write_into_data_file(indexFile);
+            }
+        }
+        indexFile.close();
+        buffer.clear(); // Clear the buffer after flushing
+    }
+
+
+
+
 
     // Function to add a new record to an existing page in the index file
     void addRecordToIndex(int pageIndex, Record &record) {
