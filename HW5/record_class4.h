@@ -44,5 +44,5 @@ Records Grab_Emp_Record(fstream &empin) {
 }
 
 bool Compare_Emp_Records(Records a, Records b){
-    return a.emp_record.id > b.emp_record.id;
+    return a.emp_record.id < b.emp_record.id;
 }
