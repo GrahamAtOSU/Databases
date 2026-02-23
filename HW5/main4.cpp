@@ -13,7 +13,7 @@ using namespace std;
 
 
 vector<Records> buffers;
-vector<fstream&> run_files;
+vector<string> run_filenames;
 
 /***TODO: You may need to modify the return type and arguments of the following functions based on your implementation.***/
 
@@ -33,7 +33,7 @@ void Sort_Buffer(fstream& empin){
 
     Records rec;
     
-    int run_index = 1;
+    int run_index = 0;
     while(true){
         int num_records = 0;
 
@@ -62,7 +62,8 @@ void Sort_Buffer(fstream& empin){
             runs << buffers[i].emp_record.manager_id << endl;
         }
 
-        run_files.push_back(runs);
+        run_filenames.push_back(run_filename);
+        run_index++;
         
         // stop if last record was already read
         if (rec.no_values == -1) break;
@@ -73,7 +74,7 @@ void Sort_Buffer(fstream& empin){
 //Function for PASS 2
 // TODO: Complete the following function to merge the sorted temporary files ('runs') and store the final result in EmpSorted.csv using PrintSorted().
 void Merge_Runs(fstream& sort_out){
-    // check if runs is open, if not flash error message
+    // check if output file is open, if not flash error message
     if (!sort_out.is_open()){
         cerr << "Errror: Sort_Out.csv file is not open." << endl;
     }
@@ -101,9 +102,6 @@ int main() {
    
     fstream sort_out; //Open file streams to read and write the EmpSorted.csv
     sort_out.open("EmpSorted.csv", ios::out | ios::app);  //Creating the EmpSorted.csv file where we will store our sorted results
-
-    fstream runs;
-    runs.open("Runs.csv", ios::in | ios:: out);
 
     //TO DO: PASS 1, Create sorted runs for Employee.csv using Sort_Buffer()
     Sort_Buffer(emp_in);
